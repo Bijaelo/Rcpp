@@ -3,6 +3,7 @@
 // grow.h: Rcpp R/C++ interface class library -- grow a pairlist
 //
 // Copyright (C) 2010 - 2013 Dirk Eddelbuettel and Romain Francois
+// Copyright (C) 2021 - 2021 Dirk Eddelbuettel, Romain Francois and Oliver Per Madsen
 //
 // This file is part of Rcpp.
 //
@@ -30,6 +31,39 @@ namespace Rcpp {
     inline SEXP pairlist() {
         return R_NilValue ;
     }
+
+    // Special handling for ArgumentList: Grow pairlist tail.
+    inline SEXP pairlist(ArgumentList& t1){
+        // code mostly taken from do_docall
+        // Not sure why this one is complaining about it not being a union type?
+        R_xlen_t n = t1.size();
+        SEXP c, call;
+        PROTECT(c = call = Rf_allocList(n));
+        // t1.names() might return R_NilValue making Shield<SEXP> ambigous
+        SEXP names;
+        // PROTECT might be unnecessary, as attr are stored as Shield<SEXP>?
+        // Better safe than sorry.
+        PROTECT(names = t1.names());
+        Rcpp::ArgumentList::iterator ti = t1.begin();
+        if(Rf_length(names) == 0){
+            for(R_xlen_t i = 0; i < n; i++, ti++){
+                SETCAR(c, *ti);
+                c = CDR(c);
+            }
+        }else{
+            for(R_xlen_t i = 0; i < n; i++, ti++){
+                SETCAR(c, *ti);
+                // PROTECT not needed here
+                SEXP namei = STRING_ELT(names, i);
+                // Test for NULL and nullstring.
+                if(namei != R_NilValue && CHAR(namei)[0] != '\0')
+                    SET_TAG(c, Rf_installTrChar(namei));
+                c = CDR(c);
+            }
+        }
+        UNPROTECT(2);
+        return(call);
+    };
 
     inline SEXP grow( SEXP head, SEXP tail ) {
         Shield<SEXP> x( head ) ;
